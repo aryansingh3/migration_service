@@ -13,16 +13,25 @@ class SlackAlert:
 
     @classmethod
     def send(cls, exception: Exception) -> None:
+        """Error alert with message and traceback."""
+        cls._post(cls._build_message_payload(exception))
+
+    @classmethod
+    def send_message(cls, text: str) -> None:
+        """Plain status message (e.g. migration paused / resumed)."""
+        cls._post({"text": f"*migration:* {text}"})
+
+    @classmethod
+    def _post(cls, payload: Dict[str, Any]) -> None:
         url = os.getenv("SLACK_WEBHOOK_URL")
         if not url:
             Logger.warning("SLACK_WEBHOOK_URL is not set - skipping Slack alert")
             return
 
-        body = json.dumps(cls._build_message_payload(exception)).encode()
-        request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
         try:
             urllib.request.urlopen(request, timeout=10)
-        except Exception as err:  # never let a failed alert hide the original error
+        except Exception as err:  # never let a failed alert hide the original error or stop the run
             Logger.error(f"Slack alert failed: {err}")
 
     @classmethod
