@@ -1,0 +1,3 @@
+pymongo==4.18.1
+python-dotenv==1.2.3
+pretty-pie-log==0.3.15
