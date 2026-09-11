@@ -5,8 +5,7 @@ from pymongo import MongoClient
 from pymongo.database import Database
 
 from common.logger import Logger
-
-TIMEOUT_MS = 2 * 60 * 1000
+from config.settings import BACKUP_DB, LIVE_DB, MONGO_TIMEOUT_MS
 
 
 class DatabaseConnection:
@@ -37,23 +36,32 @@ class DatabaseConnection:
         Logger.info(f"Attempting to connect to MongoDB {label} database")
         client = MongoClient(
             uri,
-            connectTimeoutMS=TIMEOUT_MS,
-            socketTimeoutMS=TIMEOUT_MS,
-            serverSelectionTimeoutMS=TIMEOUT_MS,
+            connectTimeoutMS=MONGO_TIMEOUT_MS,
+            socketTimeoutMS=MONGO_TIMEOUT_MS,
+            serverSelectionTimeoutMS=MONGO_TIMEOUT_MS,
         )
         client.server_info()
         Logger.info(f"Successfully connected to MongoDB {label} database")
         return client
 
     @property
-    def prod_tickets(self) -> Database:
-        """Live app DB (events, seatgeek_stats, ...)."""
-        return self._prod_client["tickets"]
+    def live(self) -> Database:
+        """Production app DB (events, seatgeek_stats, ...)."""
+        return self._prod_client[LIVE_DB]
 
     @property
-    def staging_tickets_backup(self) -> Database:
-        """Historical archive DB on the staging cluster. That cluster's `tickets` DB is the staging app's own data."""
-        return self._staging_client["tickets_backup"]
+    def backup(self) -> Database:
+        """Historical archive DB on the staging cluster."""
+        return self._staging_client[BACKUP_DB]
+
+    def assert_different_clusters(self) -> None:
+        """If both URIs reach the same cluster, "verified in backup" would mean the only copy - refuse."""
+        live = self._prod_client.admin.command("hello")
+        backup = self._staging_client.admin.command("hello")
+        same_set = live.get("setName") and live.get("setName") == backup.get("setName")
+        shared_host = set(live.get("hosts", [])) & set(backup.get("hosts", []))
+        if same_set or shared_host:
+            raise RuntimeError("MONGODB_URI and STAGING_MONGODB_URI point at the same cluster - refusing")
 
 
 db = DatabaseConnection()
