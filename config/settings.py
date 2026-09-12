@@ -17,7 +17,7 @@ WORKERS = 4  # batches processed in parallel
 COUNT_CHUNK = 10_000  # event_ids per count query (dry run)
 
 # Set to a small number (e.g. 10) to try a real run on a few events first. None = all ended events.
-MAX_EVENTS = 100
+MAX_EVENTS = None
 
 OUTPUT_FILE = os.path.join(PROJECT_ROOT, "outputs", "seatgeek_stats_orphan_event_ids.json")
 
@@ -28,3 +28,6 @@ HEALTH_CHECK_EVERY_S = 15  # a healthy reading is trusted this long before re-ch
 HEALTH_RETRY_S = 30  # while paused, re-check this often
 HEALTH_MAX_PAUSE_S = 30 * 60  # stop the run if a single pause lasts longer
 HEALTH_CPU_SAMPLE_S = 5  # CPU % is averaged over this window
+
+# Create this file (touch STOP) to stop a running migration cleanly after the batches in flight finish.
+STOP_FILE = os.path.join(PROJECT_ROOT, "STOP")

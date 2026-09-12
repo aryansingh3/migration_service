@@ -4,15 +4,23 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from common.logger import Logger
-from config.settings import BACKUP_DB, EVENTS_PER_BATCH, LIVE_DB, MAX_EVENTS, OUTPUT_FILE, STATS_COLLECTION, WORKERS
+from common.retry import with_retry
+from common.slack_alert import SlackAlert
+from config.settings import BACKUP_DB, EVENTS_PER_BATCH, LIVE_DB, MAX_EVENTS, OUTPUT_FILE, STATS_COLLECTION, STOP_FILE, WORKERS
 from database.database import db
 from health.monitor import HealthMonitor
 from migration.archive import archive_batch
 from migration.orphans import count_orphan_rows, find_orphan_event_ids
 
 
+class StopRequested(Exception):
+    """The STOP file appeared: finish what is in flight and stop cleanly."""
+
+
 def run(dry_run: bool) -> None:
     started = time.time()
+    if os.path.exists(STOP_FILE):
+        raise RuntimeError(f"{STOP_FILE} exists - delete it before starting a run")
     db.assert_different_clusters()
     Logger.info(f"{'DRY RUN' if dry_run else 'RUN'}: live {LIVE_DB}.{STATS_COLLECTION} -> staging {BACKUP_DB}.{STATS_COLLECTION}")
 
@@ -38,8 +46,10 @@ def run(dry_run: bool) -> None:
     totals = {"events": 0, "revived": 0, "copied": 0, "deleted": 0}
 
     def work(batch: list) -> dict:
+        if os.path.exists(STOP_FILE):
+            raise StopRequested
         health.wait_until_healthy()  # pauses (or stops) before touching the DBs
-        return archive_batch(batch)
+        return with_retry(f"batch of {len(batch)} events", lambda: archive_batch(batch))
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         try:
@@ -48,6 +58,10 @@ def run(dry_run: bool) -> None:
                     totals[k] += result[k]
                 rate = totals["deleted"] / max(time.time() - started, 1)
                 Logger.info(f"batch {n}/{len(batches)}: {result} | total {totals} | {rate:.0f} rows/s")
+        except StopRequested:
+            pool.shutdown(wait=True, cancel_futures=True)
+            Logger.warning(f"STOP file found - stopping cleanly after {totals}")
+            SlackAlert.send_message(f"🛑 migration stopped by request: {totals}")
         except Exception:
             pool.shutdown(wait=True, cancel_futures=True)  # stop queued batches; running ones finish their own copy->delete
             raise

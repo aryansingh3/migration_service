@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from common.logger import Logger
+from common.retry import with_retry
 from common.slack_alert import SlackAlert
 from config.settings import (
     HEALTH_CHECK_EVERY_S,
@@ -59,7 +60,7 @@ class HealthMonitor:
                 return None
             paused_at = None
             while True:
-                readings = self.read()
+                readings = with_retry("health check", self.read)
                 full = [r for r in readings if r.disk_pct >= HEALTH_MAX_DISK_PCT]
                 if full:
                     raise HealthStop(f"disk at/above {HEALTH_MAX_DISK_PCT}% ({'; '.join(map(str, full))}) - migration stopped")
