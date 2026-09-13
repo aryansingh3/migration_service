@@ -2,6 +2,12 @@ import os
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# --- Logs ---------------------------------------------------------------------
+LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+LOG_FILE_MAX_MB = 50  # one log file is rotated at this size
+LOG_BACKUPS = 4  # rotated copies kept: 50 x (1 + 4) = 250 MB worst case
+LOG_DIR_MAX_MB = 250  # anything above this in logs/ is deleted, oldest first
+
 # --- Mongo -------------------------------------------------------------------
 MONGO_TIMEOUT_MS = 2 * 60 * 1000
 LIVE_DB = "tickets"  # on MONGODB_URI (production)
