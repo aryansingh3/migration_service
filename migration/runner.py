@@ -6,15 +6,12 @@ from concurrent.futures import ThreadPoolExecutor
 from common.logger import Logger
 from common.retry import with_retry
 from common.slack_alert import SlackAlert
-from config.settings import BACKUP_DB, EVENTS_PER_BATCH, LIVE_DB, MAX_EVENTS, OUTPUT_FILE, STATS_COLLECTION, STOP_FILE, WORKERS
+from common.stop import raise_if_stopped, StopRequested
+from config.settings import BACKUP_DB, EVENTS_PER_BATCH, LIVE_DB, MAX_EVENTS, OUTPUT_FILE, PROGRESS_LOG_EVERY_S, STATS_COLLECTION, STOP_FILE, WORKERS
 from database.database import db
 from health.monitor import HealthMonitor
 from migration.archive import archive_batch
 from migration.orphans import count_orphan_rows, find_orphan_event_ids
-
-
-class StopRequested(Exception):
-    """The STOP file appeared: finish what is in flight and stop cleanly."""
 
 
 def run(dry_run: bool) -> None:
@@ -45,17 +42,29 @@ def run(dry_run: bool) -> None:
     batches = [orphans[i : i + EVENTS_PER_BATCH] for i in range(0, len(orphans), EVENTS_PER_BATCH)]
     totals = {"events": 0, "revived": 0, "copied": 0, "deleted": 0}
 
+    progress = {"rows": 0, "logged_at": time.time()}
+
+    def checkpoint(rows: int = 0) -> None:
+        # between every chunk of a batch: stop at once if asked, pause if a DB is over its limits,
+        # and show that work is happening even when one batch takes minutes
+        raise_if_stopped()
+        health.wait_until_healthy()
+        progress["rows"] += rows
+        if time.time() - progress["logged_at"] >= PROGRESS_LOG_EVERY_S:
+            progress["logged_at"] = time.time()
+            done = totals["deleted"] + progress["rows"]
+            Logger.info(f"working: {done:,} rows this run ({done / max(time.time() - started, 1):.0f} rows/s), batches finished {totals['events'] // EVENTS_PER_BATCH}/{len(batches)}")
+
     def work(batch: list) -> dict:
-        if os.path.exists(STOP_FILE):
-            raise StopRequested
-        health.wait_until_healthy()  # pauses (or stops) before touching the DBs
-        return with_retry(f"batch of {len(batch)} events", lambda: archive_batch(batch))
+        checkpoint()
+        return with_retry(f"batch of {len(batch)} events", lambda: archive_batch(batch, checkpoint))
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         try:
             for n, result in enumerate(pool.map(work, batches), 1):
                 for k in totals:
                     totals[k] += result[k]
+                progress["rows"] = 0
                 rate = totals["deleted"] / max(time.time() - started, 1)
                 Logger.info(f"batch {n}/{len(batches)}: {result} | total {totals} | {rate:.0f} rows/s")
         except StopRequested:

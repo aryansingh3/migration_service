@@ -11,7 +11,7 @@ STATS_COLLECTION = "seatgeek_stats"
 STATS_EVENT_KEY = "event_id"  # seatgeek_stats.event_id -> events._id
 
 # --- Migration ---------------------------------------------------------------
-EVENTS_PER_BATCH = 100  # ended events handled per batch
+EVENTS_PER_BATCH = 1000  # ended events handled per batch
 CHUNK_SIZE = 1000  # rows per read / write / delete round trip
 WORKERS = 4  # batches processed in parallel
 COUNT_CHUNK = 10_000  # event_ids per count query (dry run)
@@ -22,8 +22,10 @@ MAX_EVENTS = None
 OUTPUT_FILE = os.path.join(PROJECT_ROOT, "outputs", "seatgeek_stats_orphan_event_ids.json")
 
 # --- Health (checked on both live and backup) ---------------------------------
-HEALTH_MAX_CPU_PCT = 75  # mongod CPU at/above this -> pause, resume when it drops
-HEALTH_MAX_DISK_PCT = 75  # disk at/above this -> stop (waiting does not free disk)
+HEALTH_MAX_CPU_PCT = {"live": 91, "backup": 75}  # mongod CPU at/above this -> pause, resume when it drops
+# disk at/above this -> stop (waiting does not free disk). live is higher: the migration only deletes there,
+# it writes to staging only, and freed live space is reused by Mongo rather than returned to the disk.
+HEALTH_MAX_DISK_PCT = {"live": 80, "backup": 75}
 HEALTH_CHECK_EVERY_S = 15  # a healthy reading is trusted this long before re-checking
 HEALTH_RETRY_S = 30  # while paused, re-check this often
 HEALTH_MAX_PAUSE_S = 30 * 60  # stop the run if a single pause lasts longer
@@ -31,3 +33,6 @@ HEALTH_CPU_SAMPLE_S = 5  # CPU % is averaged over this window
 
 # Create this file (touch STOP) to stop a running migration cleanly after the batches in flight finish.
 STOP_FILE = os.path.join(PROJECT_ROOT, "STOP")
+
+# how often a running batch reports rows copied/deleted so far (big batches log rarely otherwise)
+PROGRESS_LOG_EVERY_S = 60

@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from common.logger import Logger
 from common.retry import with_retry
+from common.stop import raise_if_stopped, sleep_unless_stopped
 from common.slack_alert import SlackAlert
 from config.settings import (
     HEALTH_CHECK_EVERY_S,
@@ -60,12 +61,14 @@ class HealthMonitor:
                 return None
             paused_at = None
             while True:
+                raise_if_stopped()
                 readings = with_retry("health check", self.read)
-                full = [r for r in readings if r.disk_pct >= HEALTH_MAX_DISK_PCT]
+                full = [r for r in readings if r.disk_pct >= HEALTH_MAX_DISK_PCT[r.target]]
                 if full:
-                    raise HealthStop(f"disk at/above {HEALTH_MAX_DISK_PCT}% ({'; '.join(map(str, full))}) - migration stopped")
+                    over = "; ".join(f"{r} >= {HEALTH_MAX_DISK_PCT[r.target]}%" for r in full)
+                    raise HealthStop(f"disk over limit ({over}) - migration stopped")
 
-                busy = [r for r in readings if r.cpu_pct >= HEALTH_MAX_CPU_PCT]
+                busy = [r for r in readings if r.cpu_pct >= HEALTH_MAX_CPU_PCT[r.target]]
                 if not busy:
                     if paused_at is not None:
                         waited = time.time() - paused_at
@@ -76,11 +79,11 @@ class HealthMonitor:
                     self._last_healthy = time.time()
                     return readings
 
-                reason = f"cpu at/above {HEALTH_MAX_CPU_PCT}% ({'; '.join(map(str, busy))})"
+                reason = "cpu over limit (" + "; ".join(f"{r} >= {HEALTH_MAX_CPU_PCT[r.target]}%" for r in busy) + ")"
                 if paused_at is None:
                     paused_at = time.time()
                     SlackAlert.send_message(f"⏸️ migration paused: {reason} - rechecking every {HEALTH_RETRY_S}s")
                 elif time.time() - paused_at >= HEALTH_MAX_PAUSE_S:
                     raise HealthStop(f"paused {HEALTH_MAX_PAUSE_S // 60} min and still {reason} - migration stopped")
                 Logger.warning(f"paused {time.time() - paused_at:.0f}s: {reason} - rechecking in {HEALTH_RETRY_S}s")
-                time.sleep(HEALTH_RETRY_S)
+                sleep_unless_stopped(HEALTH_RETRY_S)
