@@ -40,6 +40,7 @@ def run(dry_run: bool) -> None:
         return
 
     batches = [orphans[i : i + EVENTS_PER_BATCH] for i in range(0, len(orphans), EVENTS_PER_BATCH)]
+    SlackAlert.send_message(f"🚀 migration started: {len(orphans):,} ended events in {len(batches)} batches, {WORKERS} workers")
     totals = {"events": 0, "revived": 0, "copied": 0, "deleted": 0}
 
     progress = {"rows": 0, "logged_at": time.time()}
@@ -67,6 +68,7 @@ def run(dry_run: bool) -> None:
                 progress["rows"] = 0
                 rate = totals["deleted"] / max(time.time() - started, 1)
                 Logger.info(f"batch {n}/{len(batches)}: {result} | total {totals} | {rate:.0f} rows/s")
+            SlackAlert.send_message(f"✅ migration finished in {(time.time() - started) / 3600:.1f} h: {totals}")
         except StopRequested:
             pool.shutdown(wait=True, cancel_futures=True)
             Logger.warning(f"STOP file found - stopping cleanly after {totals}")

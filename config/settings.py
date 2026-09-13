@@ -13,7 +13,7 @@ STATS_EVENT_KEY = "event_id"  # seatgeek_stats.event_id -> events._id
 # --- Migration ---------------------------------------------------------------
 EVENTS_PER_BATCH = 1000  # ended events handled per batch
 CHUNK_SIZE = 1000  # rows per read / write / delete round trip
-WORKERS = 4  # batches processed in parallel
+WORKERS = 8  # batches processed in parallel
 COUNT_CHUNK = 10_000  # event_ids per count query (dry run)
 
 # Set to a small number (e.g. 10) to try a real run on a few events first. None = all ended events.
@@ -33,6 +33,10 @@ HEALTH_CPU_SAMPLE_S = 5  # CPU % is averaged over this window
 
 # Create this file (touch STOP) to stop a running migration cleanly after the batches in flight finish.
 STOP_FILE = os.path.join(PROJECT_ROOT, "STOP")
+
+# --- Daily schedule (main.py --daily) -----------------------------------------
+DAILY_RUN_AT = "13:00"  # HH:MM, local time in DAILY_RUN_TZ - a quiet time for live
+DAILY_RUN_TZ = "Asia/Kolkata"
 
 # how often a running batch reports rows copied/deleted so far (big batches log rarely otherwise)
 PROGRESS_LOG_EVERY_S = 60

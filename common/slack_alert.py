@@ -5,6 +5,8 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from dotenv import load_dotenv
+
 from common.logger import Logger
 
 
@@ -23,6 +25,7 @@ class SlackAlert:
 
     @classmethod
     def _post(cls, payload: Dict[str, Any]) -> None:
+        load_dotenv(override=True)  # re-read .env so a changed webhook URL works without restarting the run
         url = os.getenv("SLACK_WEBHOOK_URL")
         if not url:
             Logger.warning("SLACK_WEBHOOK_URL is not set - skipping Slack alert")

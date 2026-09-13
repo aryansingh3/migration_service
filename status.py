@@ -13,6 +13,9 @@ running, pid = False, None
 if os.path.exists(PID):
     pid = open(PID).read().strip()
     running = subprocess.run(["ps", "-p", pid], capture_output=True).returncode == 0
+if not running:  # started without a pid file (e.g. in tmux on the server) - find the process by its command line
+    found = subprocess.run(["pgrep", "-f", "^[^ ]*python[^ ]* main.py --(run|daily)"], capture_output=True, text=True).stdout.split()
+    running, pid = bool(found), (found[0] if found else None)
 
 all_lines = [strip(l) for l in open(LOG, errors="ignore")]
 # only the current/latest run: everything after the last "RUN: live" marker
@@ -22,6 +25,7 @@ start = [l for l in lines if "RUN: live" in l]
 batches = [l for l in lines if re.search(r"batch \d+/\d+", l)]
 pauses = [l for l in lines if "paused" in l and "rechecking" in l]
 resumes = [l for l in lines if "resumed after" in l]
+working = [l for l in lines if "working:" in l]
 done = [l for l in lines if "RUN done" in l]
 stopped = [l for l in lines if "STOP file found" in l]
 
@@ -42,6 +46,8 @@ if batches:
     print(f"last batch : {last[:19]} {last[last.find('batch'):][:120]}")
 else:
     print("batches    : none finished yet (still selecting events, or paused)")
+if working:
+    print(f"progress   : {working[-1][:19]} {working[-1][working[-1].find('working:') + 9:].strip()}")
 print(f"pauses     : {len(pauses)} health checks paused, {len(resumes)} resumes")
 if pauses:
     print(f"last pause : {pauses[-1][:19]} {pauses[-1][pauses[-1].find('paused'):][:110]}")
