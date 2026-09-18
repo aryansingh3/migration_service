@@ -46,7 +46,7 @@ class DatabaseConnection:
 
     @property
     def live(self) -> Database:
-        """Production app DB (events, seatgeek_stats, ...)."""
+        """Production app DB (events, seatgeek_stats, seatgeek_event_sales, ...)."""
         return self._prod_client[LIVE_DB]
 
     @property
