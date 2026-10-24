@@ -32,7 +32,7 @@ OUTPUT_FILE = os.path.join(PROJECT_ROOT, "outputs", "{collection}_orphan_event_i
 HEALTH_MAX_CPU_PCT = {"live": 91, "backup": 75}  # mongod CPU at/above this -> pause, resume when it drops
 # disk at/above this -> stop (waiting does not free disk). live is higher: the migration only deletes there,
 # it writes to staging only, and freed live space is reused by Mongo rather than returned to the disk.
-HEALTH_MAX_DISK_PCT = {"live": 95, "backup": 75}
+HEALTH_MAX_DISK_PCT = {"live": 95, "backup": 85}
 HEALTH_CHECK_EVERY_S = 15  # a healthy reading is trusted this long before re-checking
 HEALTH_RETRY_S = 30  # while paused, re-check this often
 HEALTH_MAX_PAUSE_S = 30 * 60  # stop the run if a single pause lasts longer
